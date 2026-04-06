@@ -84,7 +84,7 @@ export async function GET() {
         filter: {
           and: [
             { property: "오늘(캘린더)", relation: { contains: todayCalPage.id } },
-            { property: "밀린", checkbox: { equals: false } },
+            { property: "구분", select: { equals: "오늘" } },
           ],
         },
       });
