@@ -13,9 +13,11 @@ function getTodaySeoul(): string {
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
-  }).format(new Date());
-  // "2025. 01. 06." → "2025-01-06"
-  const parts = str.replace(/\s/g, "").replace(/\./g, "-").split("-").filter(Boolean);
+  })
+    .format(new Date())
+    .replace(/\. /g, "-")
+    .replace(".", "");
+  const parts = str.split("-").filter(Boolean);
   return `${parts[0]}-${parts[1]}-${parts[2]}`;
 }
 
@@ -35,11 +37,18 @@ function getDate(props: any, key: string): string {
   return props[key]?.date?.start ?? "";
 }
 
+function getSelect(props: any, key: string): string {
+  return props[key]?.select?.name ?? "";
+}
+
+function getTitle(props: any, key: string): string {
+  return props[key]?.title?.[0]?.plain_text ?? "";
+}
+
 export async function GET() {
   try {
     const today = getTodaySeoul();
 
-    // 캘린더 DB 전체 읽기
     const calPages: any[] = [];
     let cursor: string | undefined;
     do {
@@ -69,35 +78,57 @@ export async function GET() {
 
     let todayData = {
       date: today,
-      xp: 0,
-      tokens: 0,
-      progress: "0%",
-      gauge: "",
-      todoTotal: 0,
-      todoDone: 0,
+      xp: 0, tokens: 0,
+      total: 0, done: 0,
+      dailyTotal: 0, dailyDone: 0, dailyXp: 0, dailyCoins: 0,
+      overdueTotal: 0, overdueDone: 0,
+      todayPageMissing: true,
+      dailyItems: [] as { name: string; done: boolean }[],
+      overdueItems: [] as { name: string; done: boolean }[],
     };
 
     if (todayCalPage) {
       const props = todayCalPage.properties;
+
       const todoRes: any = await notion.databases.query({
         database_id: TODO_DB,
         filter: {
-          and: [
-            { property: "오늘(캘린더)", relation: { contains: todayCalPage.id } },
-            { property: "구분", select: { equals: "오늘" } },
-          ],
+          property: "오늘(캘린더)",
+          relation: { contains: todayCalPage.id },
         },
       });
 
       const todos = todoRes.results;
+
+      const todayTodos = todos.filter((t: any) => getSelect(t.properties, "구분") === "오늘");
+      const dailyTodos = todos.filter((t: any) => getSelect(t.properties, "구분") === "일일");
+      const overdueTodos = todos.filter((t: any) => getSelect(t.properties, "구분") === "밀린");
+
+      const todayDone = todayTodos.filter((t: any) => getCheckbox(t.properties, "완료")).length;
+      const dailyDone = dailyTodos.filter((t: any) => getCheckbox(t.properties, "완료")).length;
+      const overdueDone = overdueTodos.filter((t: any) => getCheckbox(t.properties, "완료")).length;
+
       todayData = {
         date: today,
         xp: getNumber(props, "XP"),
         tokens: getNumber(props, "토큰(오늘)"),
-        progress: props["진행률 %"]?.rich_text?.[0]?.plain_text ?? "0%",
-        gauge: props["오늘 진척도"]?.rich_text?.[0]?.plain_text ?? "",
-        todoTotal: todos.length,
-        todoDone: todos.filter((t: any) => getCheckbox(t.properties, "완료")).length,
+        total: todayTodos.length,
+        done: todayDone,
+        dailyTotal: dailyTodos.length,
+        dailyDone,
+        dailyXp: dailyDone * 5,
+        dailyCoins: dailyDone,
+        overdueTotal: overdueTodos.length,
+        overdueDone,
+        todayPageMissing: false,
+        dailyItems: dailyTodos.map((t: any) => ({
+          name: getTitle(t.properties, "TODO"),
+          done: getCheckbox(t.properties, "완료"),
+        })),
+        overdueItems: overdueTodos.map((t: any) => ({
+          name: getTitle(t.properties, "TODO"),
+          done: getCheckbox(t.properties, "완료"),
+        })),
       };
     }
 
